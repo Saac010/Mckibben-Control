@@ -11,8 +11,9 @@ from dash.dependencies import Input, Output, State, ClientsideFunction
 
 #            IMPORTACIÓN GESTOR TCP
 
+
 try:
-    from tcp_manager import get_sensor_buffer, send_tcp_command, set_target_ip, is_esp_connected, purge_buffer
+    from mqtt_manager import get_sensor_buffer, send_tcp_command, set_target_ip, is_esp_connected, purge_buffer
     print("[SISTEMA] Conectado al Gestor TCP.")
 except ImportError:
     print("[ERROR] No se encuentra tcp_manager.py. Usando modo simulado.")
@@ -26,7 +27,7 @@ log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
-server = app
+server = app.server
 
 #               ESTILOS Y CONFIGURACIÓN
 
@@ -52,7 +53,7 @@ def create_chart(x, y, title, xl, yl, color):
             x=x, y=y, mode='lines',
             line=dict(color=color, width=2)
         ))
-    
+
     fig.update_layout(
         title=dict(text=title, font=dict(color=COLOR_BLUE, size=16, family="Arial"), x=0.5),
         template='plotly_white', paper_bgcolor='white', plot_bgcolor='white',
@@ -62,7 +63,7 @@ def create_chart(x, y, title, xl, yl, color):
         font=dict(family="Arial, sans-serif", color=COLOR_TEXT_DARK),
         hovermode="x unified"
     )
-    if not x: 
+    if not x:
         fig.update_layout(xaxis=dict(range=[0, 10]), yaxis=dict(range=[0, 10]))
     return fig
 
@@ -72,7 +73,7 @@ def create_chart(x, y, title, xl, yl, color):
 app.layout = dbc.Container([
     dcc.Store(id='session-store', data={'running': False, 'start_time': None}),
     dcc.Store(id='main-store', data={'t': [], 'f': [], 'p': [], 'l': [], 'a': [], 'pwm': []}),
-    dcc.Store(id='ip-store', storage_type='local'), 
+    dcc.Store(id='ip-store', storage_type='local'),
     dcc.Interval(id='intervalo-lectura', interval=500, n_intervals=0),
     dcc.Download(id="download-excel"),
 
@@ -102,7 +103,7 @@ app.layout = dbc.Container([
                 # CONTROLES
                 html.Div(className="mb-4", children=[
                     html.Label("ESTADO DEL SISTEMA", style=sidebar_label, className="mb-2 text-center w-100"),
-                    html.Div(id="status-indicator", children="DESCONECTADO", 
+                    html.Div(id="status-indicator", children="DESCONECTADO",
                              style={'textAlign': 'center', 'color': 'white', 'marginBottom':'15px', 'fontWeight':'bold', 'fontSize':'0.9rem', 'backgroundColor': COLOR_RED, 'padding':'6px', 'borderRadius':'4px'}),
                     dbc.Row([
                         dbc.Col(dbc.Button("INICIAR", id="btn-start", color="light", className="w-100 mb-2 fw-bold", style={'color': COLOR_BLUE}, n_clicks=0, disabled=True), width=6),
@@ -111,7 +112,7 @@ app.layout = dbc.Container([
                     dbc.Button("RESET DE VALORES", id="btn-tare", color="light", className="w-100 mb-2 fw-bold", n_clicks=0, style={'color': COLOR_BLUE}),
                 ]),
                 html.Hr(style={'borderColor': 'rgba(255,255,255,0.2)'}),
-                
+
                 # TIPO PRUEBA Y MANUAL
                 html.Label("TIPO DE PRUEBA", style=sidebar_label, className="mb-2"),
                 dbc.ButtonGroup([
@@ -206,9 +207,9 @@ app.clientside_callback(
         return window.dash_clientside.no_update;
     }
     """,
-    [Output('graph-iso-f-t', 'figure', allow_duplicate=True), 
-     Output('graph-isot-p-t', 'figure', allow_duplicate=True), 
-     Output('graph-isot-p-l', 'figure', allow_duplicate=True), 
+    [Output('graph-iso-f-t', 'figure', allow_duplicate=True),
+     Output('graph-isot-p-t', 'figure', allow_duplicate=True),
+     Output('graph-isot-p-l', 'figure', allow_duplicate=True),
      Output('graph-isot-l-t', 'figure', allow_duplicate=True),
      Output('main-store', 'data', allow_duplicate=True)],
     [Input('btn-clear', 'n_clicks')],
@@ -224,31 +225,31 @@ def manage_ip(n_clicks, stored_ip, input_val):
     trigger = ctx.triggered_id
     if trigger is None or trigger == 'ip-store':
         if stored_ip: set_target_ip(stored_ip); return dash.no_update, stored_ip, stored_ip
-        return dash.no_update, "", "192.168.1.100" 
+        return dash.no_update, "", "192.168.1.100"
     if trigger == 'btn-update-ip' and input_val:
         set_target_ip(str(input_val))
-        return input_val, input_val, dash.no_update 
+        return input_val, input_val, dash.no_update
     return dash.no_update, dash.no_update, dash.no_update
 
 # --- 3. CALLBACK MAESTRO --
 @app.callback(
-    [Output('main-store', 'data'), 
-     Output('ind-len', 'children'), Output('ind-pres', 'children'), Output('ind-force', 'children'), 
+    [Output('main-store', 'data'),
+     Output('ind-len', 'children'), Output('ind-pres', 'children'), Output('ind-force', 'children'),
      Output('ind-time', 'children'), Output('ind-ang', 'children'), Output('ind-pwm', 'children'),
      Output('graph-iso-f-t', 'figure'), Output('graph-isot-p-t', 'figure'), Output('graph-isot-p-l', 'figure'), Output('graph-isot-l-t', 'figure'),
      Output('status-indicator', 'children'), Output('status-indicator', 'style'), Output('btn-start', 'disabled')],
-    [Input('intervalo-lectura', 'n_intervals'), Input('btn-clear', 'n_clicks')], 
+    [Input('intervalo-lectura', 'n_intervals'), Input('btn-clear', 'n_clicks')],
     [State('main-store', 'data'), State('session-store', 'data')]
 )
 def ciclo_datos(n, n_clear, data, session):
-    
+
     # 1. PURGA DE BACKEND (Complementa al JS)
     trigger = ctx.triggered_id
     if trigger == 'btn-clear':
         purge_buffer()
         return (
-            {'t': [], 'f': [], 'p': [], 'l': [], 'a': [], 'pwm': []}, 
-            "0.0", "0.0", "0.0", "0.00", "0.0", "0", 
+            {'t': [], 'f': [], 'p': [], 'l': [], 'a': [], 'pwm': []},
+            "0.0", "0.0", "0.0", "0.00", "0.0", "0",
             dash.no_update, dash.no_update, dash.no_update, dash.no_update,
             "LISTO", {'textAlign': 'center', 'marginBottom':'15px', 'fontWeight':'bold', 'fontSize':'0.9rem', 'padding':'6px', 'borderRadius':'4px', 'backgroundColor': COLOR_GREEN, 'color': 'white'}, False
         )
@@ -256,10 +257,10 @@ def ciclo_datos(n, n_clear, data, session):
     # 2. INICIALIZACIÓN
     if data is None: data = {'t': [], 'f': [], 'p': [], 'l': [], 'a': [], 'pwm': []}
     if session is None: session = {'running': False, 'start_time': None}
-    
+
     try: conectado = is_esp_connected()
     except: conectado = False
-    
+
     style_base = {'textAlign': 'center', 'marginBottom':'15px', 'fontWeight':'bold', 'fontSize':'0.9rem', 'padding':'6px', 'borderRadius':'4px'}
     status_txt = "DESCONECTADO"
     status_style = {**style_base, 'backgroundColor': COLOR_RED, 'color': 'white'}
@@ -270,7 +271,7 @@ def ciclo_datos(n, n_clear, data, session):
         if session.get('running'):
             status_txt, status_style = "GRABANDO...", {**style_base, 'backgroundColor': COLOR_GREEN, 'color': 'white', 'animation': 'pulse 1s infinite'}
         elif session.get('start_time'):
-            status_txt, status_style = "PAUSADO", {**style_base, 'backgroundColor': COLOR_GREEN_DARK, 'color': COLOR_BG_LIGHT_DARK} 
+            status_txt, status_style = "PAUSADO", {**style_base, 'backgroundColor': COLOR_GREEN_DARK, 'color': COLOR_BG_LIGHT_DARK}
         else:
             status_txt, status_style = "LISTO", {**style_base, 'backgroundColor': COLOR_GREEN, 'color': 'white'}
 
@@ -288,19 +289,19 @@ def ciclo_datos(n, n_clear, data, session):
         t_now = time.time()
         start_t = session['start_time']
         display_time = f"{t_now - start_t:.2f}"
-        
+
         if session.get('running') and buffer_list:
 
             last_t = data['t'][-1] if len(data['t']) > 0 else 0.0
             ideal_base_time = (t_now - start_t) - 0.5
             safe_base_time = max(ideal_base_time, last_t + 0.001)
             num_points = len(buffer_list)
-            time_step = 0.5 / max(num_points, 1) 
-            
+            time_step = 0.5 / max(num_points, 1)
+
             for i, vals in enumerate(buffer_list):
                 vf, vl, vp, va, vpwm = vals
                 t_point = safe_base_time + (i * time_step)
-                
+
                 if len(data['t']) > 0 and t_point <= data['t'][-1]:
                      t_point = data['t'][-1] + 0.001
 
@@ -310,9 +311,9 @@ def ciclo_datos(n, n_clear, data, session):
                 data['l'].append(vl)
                 if 'a' in data: data['a'].append(va)
                 if 'pwm' in data: data['pwm'].append(vpwm)
-            
+
             # Limitar historial
-            MAX_POINTS = 10000 
+            MAX_POINTS = 10000
             if len(data['t']) > MAX_POINTS:
                 excess = len(data['t']) - MAX_POINTS
                 for k in data: data[k] = data[k][excess:]
@@ -322,7 +323,7 @@ def ciclo_datos(n, n_clear, data, session):
     fig3 = create_chart(data['p'], data['l'], "Longitud (cm) vs Presión (PSI)", "Presión (PSI)", "Longitud (cm)", COLOR_GREEN)
     fig4 = create_chart(data['t'], data['l'], "Longitud (cm) vs Tiempo (s)", "Tiempo (s)", "Longitud (cm)", COLOR_BLUE)
 
-    return (data, f"{l_disp:.1f}", f"{p_disp:.1f}", f"{f_disp:.1f}", display_time, f"{a_disp:.1f}", f"{int(pwm_disp)}", 
+    return (data, f"{l_disp:.1f}", f"{p_disp:.1f}", f"{f_disp:.1f}", display_time, f"{a_disp:.1f}", f"{int(pwm_disp)}",
             fig1, fig2, fig3, fig4, status_txt, status_style, btn_start_disabled)
 
 # --- 4. OTROS BOTONES ---
@@ -340,7 +341,7 @@ def botones_accion(n_start, n_clear, session):
     if trigger == 'btn-start':
         session['running'] = not session['running']
         if session['running'] and session['start_time'] is None: session['start_time'] = time.time()
-        
+
         if session['running']:
             return session, "PAUSAR", "warning", {'color': COLOR_BLUE, 'fontWeight':'bold'}
         else:
@@ -381,5 +382,4 @@ def download(n, data):
     return dcc.send_data_frame(pd.DataFrame(data).to_excel, "Datos_McKibben_ITToluca.xlsx", index=False)
 
 if __name__ == '__main__':
-
-    app.run(debug=False, host='localhost', port=4050)
+    app.run(debug=False)
