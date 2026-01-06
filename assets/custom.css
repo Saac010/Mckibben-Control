@@ -1,0 +1,19 @@
+/* assets/custom.css */
+
+/* Pone blanco el texto de los números de la escala del Knob */
+#knob-presion g.daq-knob--scale text {
+    fill: #ffffff !important;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+/* Pone blanca la etiqueta central (PSI) */
+#knob-presion .daq-knob--label {
+    color: #ffffff !important;
+    fill: #ffffff !important;
+}
+
+/* Opcional: Mejora el color del anillo de fondo para que no se pierda */
+#knob-presion g.daq-knob--ring path {
+    stroke: #444444 !important; 
+}
