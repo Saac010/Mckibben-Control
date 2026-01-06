@@ -26,7 +26,7 @@ log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
-
+server = app
 
 #               ESTILOS Y CONFIGURACIÓN
 
@@ -381,4 +381,5 @@ def download(n, data):
     return dcc.send_data_frame(pd.DataFrame(data).to_excel, "Datos_McKibben_ITToluca.xlsx", index=False)
 
 if __name__ == '__main__':
+
     app.run(debug=False, host='localhost', port=4050)
